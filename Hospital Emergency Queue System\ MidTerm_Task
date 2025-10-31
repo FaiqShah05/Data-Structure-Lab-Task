@@ -1,0 +1,172 @@
+#include <iostream>
+using namespace std;
+class node {
+    
+    public:
+    
+    int data;
+    node* next;
+    node* prev;
+    
+    node(int id){
+        
+        data =id ;
+        next = nullptr;
+        prev = nullptr;
+    }
+    
+};
+
+
+class hospital_queue{
+    
+    private:
+    
+    node* head;
+    node* tail;
+    int count;
+    
+    public:
+    
+    hospital_queue(){
+        
+        head = tail = nullptr;
+        count= 0;
+        
+    }
+    
+    void insertatbegining(int id){
+        
+        
+        node* n = new node(id);
+        
+        if(head==nullptr){
+            head = tail = n;
+        }
+        
+        n->next=head;
+        if(head !=nullptr)
+        {
+        head->prev = n;
+        head= n;
+        count++;
+            
+        }
+        
+    }
+        void insertatend(int id){
+        
+        node* n=new node(id);
+        node* curr = head;
+        
+        if(head==nullptr)
+        {
+            head=tail=n;
+        }
+        
+        else{
+        while(curr->next!=nullptr)
+        {
+            curr=curr->next;
+        
+        }
+        curr->next=n;
+        n->prev=curr;
+        n->next=nullptr;
+        }
+        count++;
+    
+    }
+        
+    void insertatpostion(int id,int pos)
+    {
+        
+        if(pos<1 || pos>(count+1))
+        {
+            cout<<"position out of range ";
+            return ;
+        }
+        
+        node* n=new node(id);
+        node *curr=head;
+ 
+        for(int i =1 ; i<(pos-1) ; i++)
+        {
+            curr=curr->next;
+        }
+        
+        n->next=curr->next;
+        curr->next->prev=n;
+        n->prev = curr;
+        curr->next= n;
+        
+        
+        count++;
+        
+        
+        
+    }
+    
+    
+
+    
+    void deletefromstart()
+    {
+        node* curr=head;
+        if(head != nullptr){
+         head= head->next;
+         head->prev=nullptr;
+         delete curr;
+        }
+        count--;
+        
+    }
+    
+    
+    void display(){
+        
+        node* temp=head;
+        
+        while(temp!=nullptr)
+        {
+            cout<<temp->data<<" ";
+            temp=temp->next;
+        }
+        
+    }
+    
+};
+
+
+int main() {
+   
+   hospital_queue patient1;
+   
+   
+   patient1.insertatend(101);
+   
+   cout<<"not a critical patient ..kindly wait for ur turn "<<endl;
+    patient1.display();
+    cout<<endl;
+   patient1.insertatend(102);
+   cout<<"not a critical patient ..kindly wait for ur turn "<<endl;
+   patient1.display();
+    cout<<endl;
+   patient1.insertatbegining(200); 
+   cout<<"critical patient... needs urgent medication"<<endl;
+    patient1.display();
+    cout<<endl;
+  patient1.insertatpostion(150, 2);
+  cout<<"patient needs to be treated after the first one "<<endl;
+   patient1.display();
+   cout<<endl;
+  patient1.deletefromstart();
+  cout<<"critical patient treated ..... discharged from the hopital ward"<<endl;
+   patient1.display();
+  cout<<endl;
+  patient1.insertatend(300);
+  cout<<" not a critical patient ..kindly wait for ur turn"<<endl;
+ patient1.display();
+
+    return 0;
+}

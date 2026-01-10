@@ -1,0 +1,384 @@
+#include <iostream>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+/**
+ * Player Record Structure
+ * Stores the core data for each player and the metadata needed for 
+ * the self-balancing AVL tree and rank-based queries[cite: 18, 19].
+ */
+struct Player {
+    int rating;   // Unique identifier for ordering [cite: 19]
+    string name;  // Player name (no spaces) [cite: 19]
+    int hp;       // Health points [cite: 19]
+    
+    int height;   // Tree height for balancing [cite: 190]
+    int size;     // Subtree size for RANK and KTH [cite: 11]
+    
+    Player *left, *right;
+
+    Player(int r, string n, int h) 
+        : rating(r), name(n), hp(h), height(0), size(1), left(nullptr), right(nullptr) {}
+};
+
+class ArenaTree {
+private:
+    Player* root;
+
+    // Standard height calculation: -1 for empty, 0 for single node [cite: 191, 192]
+    int getHeight(Player* node) {
+        return node ? node->height : -1;
+    }
+
+    // Returns the number of nodes in the subtree
+    int getSize(Player* node) {
+        return node ? node->size : 0;
+    }
+
+    // Re-calculates height and size after tree modifications
+    void updateNodeStats(Player* node) {
+        if (node) {
+            node->height = 1 + max(getHeight(node->left), getHeight(node->right));
+            node->size = 1 + getSize(node->left) + getSize(node->right);
+        }
+    }
+
+    // --- AVL Rotation Logic for maintaining O(log N) efficiency [cite: 31] ---
+    Player* rotateRight(Player* y) {
+        Player* x = y->left;
+        Player* T2 = x->right;
+        x->right = y;
+        y->left = T2;
+        updateNodeStats(y);
+        updateNodeStats(x);
+        return x;
+    }
+
+    Player* rotateLeft(Player* x) {
+        Player* y = x->right;
+        Player* T2 = y->left;
+        y->left = x;
+        x->right = T2;
+        updateNodeStats(x);
+        updateNodeStats(y);
+        return y;
+    }
+
+    // Checks the balance factor of a node
+    int getBalanceFactor(Player* node) {
+        return node ? getHeight(node->left) - getHeight(node->right) : 0;
+    }
+
+    // Core balancing function used after insertion and deletion
+    Player* rebalance(Player* node) {
+        updateNodeStats(node);
+        int balanceFactor = getBalanceFactor(node);
+
+        // Left-heavy cases
+        if (balanceFactor > 1) {
+            if (getBalanceFactor(node->left) < 0) node->left = rotateLeft(node->left);
+            return rotateRight(node);
+        }
+        // Right-heavy cases
+        if (balanceFactor < -1) {
+            if (getBalanceFactor(node->right) > 0) node->right = rotateRight(node->right);
+            return rotateLeft(node);
+        }
+        return node;
+    }
+
+    // --- Recursive Tree Operations ---
+
+    Player* insertPlayer(Player* node, int rating, string name, int hp, bool &isSuccess) {
+        if (!node) {
+            isSuccess = true;
+            return new Player(rating, name, hp);
+        }
+        if (rating < node->rating) 
+            node->left = insertPlayer(node->left, rating, name, hp, isSuccess);
+        else if (rating > node->rating) 
+            node->right = insertPlayer(node->right, rating, name, hp, isSuccess);
+        else {
+            isSuccess = false; // Prevents duplicate ratings [cite: 41, 42]
+            return node;
+        }
+        return rebalance(node);
+    }
+
+    Player* removePlayer(Player* node, int rating, bool &isSuccess) {
+        if (!node) {
+            isSuccess = false;
+            return nullptr;
+        }
+        if (rating < node->rating) 
+            node->left = removePlayer(node->left, rating, isSuccess);
+        else if (rating > node->rating) 
+            node->right = removePlayer(node->right, rating, isSuccess);
+        else {
+            isSuccess = true; // Node located [cite: 52, 53]
+            // Case 0 or 1 Child [cite: 58, 59]
+            if (!node->left || !node->right) {
+                Player* temp = node->left ? node->left : node->right;
+                delete node;
+                return temp;
+            } else {
+                // Case 2 Children: Find inorder successor [cite: 60, 61]
+                Player* successor = node->right;
+                while (successor->left) successor = successor->left;
+                
+                node->rating = successor->rating;
+                node->name = successor->name;
+                node->hp = successor->hp;
+                node->right = removePlayer(node->right, successor->rating, isSuccess);
+            }
+        }
+        return rebalance(node);
+    }
+
+    void performRangeSearch(Player* node, int L, int R, bool &isFound) {
+        if (!node) return;
+        if (node->rating > L) performRangeSearch(node->left, L, R, isFound);
+        if (node->rating >= L && node->rating <= R) {
+            cout << node->rating << " " << node->name << " " << node->hp << "\n";
+            isFound = true;
+        }
+        if (node->rating < R) performRangeSearch(node->right, L, R, isFound);
+    }
+
+    int getLeafCount(Player* node) {
+        if (!node) return 0;
+        if (!node->left && !node->right) return 1;
+        return getLeafCount(node->left) + getLeafCount(node->right);
+    }
+
+    Player* findKthSmallest(Player* node, int k) {
+        int leftSubtreeSize = getSize(node->left);
+        if (k == leftSubtreeSize + 1) return node;
+        if (k <= leftSubtreeSize) return findKthSmallest(node->left, k);
+        return findKthSmallest(node->right, k - leftSubtreeSize - 1);
+    }
+
+    int findNodeDepth(Player* node, int target, int currentDepth) {
+        if (!node) return -1;
+        if (node->rating == target) return currentDepth;
+        if (target < node->rating) return findNodeDepth(node->left, target, currentDepth + 1);
+        return findNodeDepth(node->right, target, currentDepth + 1);
+    }
+
+    Player* findLowestCommonAncestor(Player* node, int a, int b) {
+        if (!node) return nullptr;
+        if (a < node->rating && b < node->rating) return findLowestCommonAncestor(node->left, a, b);
+        if (a > node->rating && b > node->rating) return findLowestCommonAncestor(node->right, a, b);
+        return node;
+    }
+
+public:
+    ArenaTree() : root(nullptr) {}
+
+    // 1) JOIN [cite: 35]
+    void join(int r, string n, int h) {
+        bool isSuccess = false;
+        root = insertPlayer(root, r, n, h, isSuccess);
+        cout << (isSuccess ? "JOINED" : "DUPLICATE") << "\n";
+    }
+
+    // 2) LEAVE [cite: 45]
+    void leave(int r) {
+        bool isSuccess = false;
+        root = removePlayer(root, r, isSuccess);
+        cout << (isSuccess ? "LEFT" : "NOT FOUND") << "\n";
+    }
+
+    // 3) STATUS [cite: 62]
+    void status(int r) {
+        Player* curr = root;
+        while (curr) {
+            if (curr->rating == r) {
+                cout << curr->rating << " " << curr->name << " " << curr->hp << "\n";
+                return;
+            }
+            curr = (r < curr->rating) ? curr->left : curr->right;
+        }
+        cout << "NOT FOUND\n";
+    }
+
+    // 4) DAMAGE [cite: 71]
+    void damage(int r, int amt) {
+        Player* curr = root;
+        while (curr) {
+            if (curr->rating == r) {
+                curr->hp = max(0, curr->hp - amt); // No negative health [cite: 80]
+                cout << "DAMAGED " << curr->hp << "\n";
+                return;
+            }
+            curr = (r < curr->rating) ? curr->left : curr->right;
+        }
+        cout << "NOT FOUND\n";
+    }
+
+    // 5) HEAL [cite: 84]
+    void heal(int r, int amt) {
+        Player* curr = root;
+        while (curr) {
+            if (curr->rating == r) {
+                curr->hp += amt;
+                cout << "HEALED " << curr->hp << "\n";
+                return;
+            }
+            curr = (r < curr->rating) ? curr->left : curr->right;
+        }
+        cout << "NOT FOUND\n";
+    }
+
+    // 6) MATCH [cite: 99]
+    void match(int x) {
+        if (!root) { cout << "EMPTY\n"; return; }
+        Player *p = nullptr, *s = nullptr, *curr = root;
+        
+        // Find Predecessor and Successor [cite: 105, 106]
+        while (curr) {
+            if (curr->rating < x) { p = curr; curr = curr->right; }
+            else { s = curr; curr = curr->left; }
+        }
+
+        if (!p && !s) cout << "EMPTY\n";
+        else if (!p) cout << s->rating << " " << s->name << " " << s->hp << "\n";
+        else if (!s) cout << p->rating << " " << p->name << " " << p->hp << "\n";
+        else {
+            // Distance check with lower rating tie-breaker [cite: 112, 114]
+            long long distP = (long long)x - p->rating;
+            long long distS = (long long)s->rating - x;
+            if (distP <= distS) cout << p->rating << " " << p->name << " " << p->hp << "\n";
+            else cout << s->rating << " " << s->name << " " << s->hp << "\n";
+        }
+    }
+
+    // 7) NEXT & 8) PREV helper
+    Player* getNeighbor(int x, bool getNext) {
+        Player *res = nullptr, *curr = root;
+        while (curr) {
+            if (getNext) {
+                if (curr->rating > x) { res = curr; curr = curr->left; }
+                else curr = curr->right;
+            } else {
+                if (curr->rating < x) { res = curr; curr = curr->right; }
+                else curr = curr->left;
+            }
+        }
+        return res;
+    }
+
+    // 9) RANGE [cite: 135]
+    void range(int l, int r) {
+        bool isFound = false;
+        performRangeSearch(root, l, r, isFound);
+        if (!isFound) cout << "EMPTY\n";
+    }
+
+    // 10) RANK [cite: 143]
+    void rank(int x) {
+        int count = 0;
+        Player* curr = root;
+        while (curr) {
+            if (x > curr->rating) {
+                count += getSize(curr->left) + 1;
+                curr = curr->right;
+            } else curr = curr->left;
+        }
+        cout << count << "\n";
+    }
+
+    // 11) KTH [cite: 151]
+    void kth(int k) {
+        if (k < 1 || k > getSize(root)) cout << "OUT_OF_RANGE\n";
+        else {
+            Player* p = findKthSmallest(root, k);
+            cout << p->rating << " " << p->name << " " << p->hp << "\n";
+        }
+    }
+
+    // 12) DUEL [cite: 161]
+    void duel(int a, int b) {
+        Player* nodeA = nullptr, *nodeB = nullptr, *curr = root;
+        while (curr) { // Verify A exists
+            if (curr->rating == a) { nodeA = curr; break; }
+            curr = (a < curr->rating) ? curr->left : curr->right;
+        }
+        curr = root;
+        while (curr) { // Verify B exists
+            if (curr->rating == b) { nodeB = curr; break; }
+            curr = (b < curr->rating) ? curr->left : curr->right;
+        }
+
+        if (!nodeA || !nodeB) cout << "NOT_FOUND\n";
+        else {
+            Player* lca = findLowestCommonAncestor(root, a, b);
+            int dist = findNodeDepth(root, a, 0) + findNodeDepth(root, b, 0) - 2 * findNodeDepth(root, lca->rating, 0);
+            cout << "DIST " << dist << "\n";
+        }
+    }
+
+    // 13) STATS [cite: 174]
+    void stats() {
+        cout << "PLAYERS " << getSize(root) << "\n";
+        if (!root) {
+            cout << "MIN NONE\nMAX NONE\n";
+        } else {
+            Player* minN = root; while (minN->left) minN = minN->left;
+            Player* maxN = root; while (maxN->right) maxN = maxN->right;
+            cout << "MIN " << minN->rating << "\nMAX " << maxN->rating << "\n";
+        }
+        cout << "HEIGHT " << getHeight(root) << "\nLEAVES " << getLeafCount(root) << "\n";
+    }
+};
+
+int main() {
+    // Fast I/O for 200,000 commands [cite: 197]
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int Q;
+    if (!(cin >> Q)) return 0;
+    
+    ArenaTree arena;
+    while (Q--) {
+        string cmd; cin >> cmd;
+        if (cmd == "JOIN") {
+            int r, h; string n; cin >> r >> n >> h;
+            arena.join(r, n, h);
+        } else if (cmd == "LEAVE") {
+            int r; cin >> r; arena.leave(r);
+        } else if (cmd == "STATUS") {
+            int r; cin >> r; arena.status(r);
+        } else if (cmd == "DAMAGE") {
+            int r, a; cin >> r >> a; arena.damage(r, a);
+        } else if (cmd == "HEAL") {
+            int r, a; cin >> r >> a; arena.heal(r, a);
+        } else if (cmd == "MATCH") {
+            int x; cin >> x; arena.match(x);
+        } else if (cmd == "NEXT") {
+            int x; cin >> x;
+            Player* p = arena.getNeighbor(x, true);
+            if (p) cout << p->rating << " " << p->name << " " << p->hp << "\n";
+            else cout << "NONE\n";
+        } else if (cmd == "PREV") {
+            int x; cin >> x;
+            Player* p = arena.getNeighbor(x, false);
+            if (p) cout << p->rating << " " << p->name << " " << p->hp << "\n";
+            else cout << "NONE\n";
+        } else if (cmd == "RANGE") {
+            int l, r; cin >> l >> r; arena.range(l, r);
+        } else if (cmd == "RANK") {
+            int x; cin >> x; arena.rank(x);
+        } else if (cmd == "KTH") {
+            int k; cin >> k; arena.kth(k);
+        } else if (cmd == "DUEL") {
+            int a, b; cin >> a >> b; arena.duel(a, b);
+        } else if (cmd == "STATS") {
+            arena.stats();
+        }
+    }
+    return 0;
+}
